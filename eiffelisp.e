@@ -10,7 +10,9 @@ feature
   kQuote: CHARACTER = '%''
 
   kNil: LOBJ
+  sym_t: LOBJ
   sym_quote: LOBJ
+  g_env: LOBJ
 
   safeCar(obj: LOBJ): LOBJ
     do
@@ -273,6 +275,71 @@ feature
       end
     end
 
+  findVar(sym: LOBJ; env: LOBJ): LOBJ
+    local
+      e: LOBJ
+      a: LOBJ
+    do
+      Result := kNil
+      from
+        e := env
+      until
+        e = kNil
+      loop
+        if attached {CONS} e as c1 then
+          from
+            a := c1.car
+          until
+            a = kNil
+          loop
+            if attached {CONS} a as c2 then
+              if safeCar(c2.car) = sym then
+                Result := c2.car
+                a := kNil
+                e := kNil  -- break
+              else
+                a := c2.cdr
+              end
+            else
+              a := kNil  -- break
+            end
+          end
+          e := c1.cdr
+        else
+          e := kNil  -- break
+        end
+      end
+    end
+
+  addToEnv(sym, val, env: LOBJ)
+    do
+      if attached {CONS} env as c then
+        c.car := makeCons(makeCons(sym, val), c.car)
+      end
+    end
+
+  eval(obj, env: LOBJ): LOBJ
+    local
+      bind: LOBJ
+    do
+      if attached {NIL} obj then
+        Result := obj
+      elseif attached{NUM} obj then
+        Result := obj
+      elseif attached{ERROR} obj then
+        Result := obj
+      elseif attached{SYM} obj as s then
+        bind := findVar(obj, env)
+        if attached {CONS} bind as c then
+          Result := c.cdr
+        else
+          Result := makeError(s.data + " has no value")
+        end
+      else
+        Result := makeError("noimpl")
+      end
+    end
+
   init
     local
       nil: NIL
@@ -282,7 +349,11 @@ feature
 
       create sym_table.make(32)
       sym_table.put(kNil, "nil")
+      sym_t := makeSym("t")
       sym_quote := makeSym("quote")
+
+      g_env := makeCons(kNil, kNil)
+      addToEnv(sym_t, sym_t, g_env)
     end
 
   make
@@ -299,7 +370,7 @@ feature
         io.read_line
         line := io.last_string
         if line.count > 0 then
-          print(printObj(read(line).obj))
+          print(printObj(eval(read(line).obj, g_env)))
           io.put_new_line
         end
       end
