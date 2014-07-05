@@ -12,6 +12,7 @@ feature
   kNil: LOBJ
   sym_t: LOBJ
   sym_quote: LOBJ
+  sym_if: LOBJ
   g_env: LOBJ
 
   safeCar(obj: LOBJ): LOBJ
@@ -68,6 +69,14 @@ feature
     do
       create c.make_cons(a, d)
       Result := c
+    end
+
+  makeSubr(id: INTEGER): LOBJ
+    local
+      subr: SUBR
+    do
+      create subr.make_subr(id)
+      Result := subr
     end
 
   nreverse(l: LOBJ): LOBJ
@@ -237,6 +246,8 @@ feature
         Result := "<error: " + e.data + ">"
       elseif attached {CONS} obj then
         Result := printList(obj)
+      elseif attached {SUBR} obj then
+        Result := "<subr>"
       else
         Result := "<unknown>"
       end
@@ -321,6 +332,9 @@ feature
   eval(obj, env: LOBJ): LOBJ
     local
       bind: LOBJ
+      op: LOBJ
+      args: LOBJ
+      c: LOBJ
     do
       if attached {NIL} obj then
         Result := obj
@@ -330,14 +344,99 @@ feature
         Result := obj
       elseif attached{SYM} obj as s then
         bind := findVar(obj, env)
-        if attached {CONS} bind as c then
-          Result := c.cdr
+        if attached {CONS} bind as b then
+          Result := b.cdr
         else
           Result := makeError(s.data + " has no value")
         end
       else
-        Result := makeError("noimpl")
+        op := safeCar(obj)
+        args := safeCdr(obj)
+        if op = sym_quote then
+          Result := safeCar(args)
+        elseif op = sym_if then
+          c := eval(safeCar(args), env)
+          if attached {ERROR} c then
+            Result := c
+          elseif c = kNil then
+            Result := eval(safeCar(safeCdr(safeCdr(args))), env)
+          else
+            Result := eval(safeCar(safeCdr(args)), env)
+          end
+        else
+          Result := apply(eval(op, env), evlis(args, env))
+        end
       end
+    end
+
+  evlis(obj, env: LOBJ): LOBJ
+    local
+      lst: LOBJ
+      elm: LOBJ
+    do
+      Result := kNil
+      from
+        lst := obj
+      until
+        lst = kNil
+      loop
+        if attached {CONS} lst as c then
+          elm := eval(c.car, env)
+          if attached {ERROR} elm then
+            Result := elm
+            lst := kNil  -- break
+          else
+            Result := makeCons(elm, Result)
+            lst := c.cdr
+          end
+        else
+          lst := kNil  -- break
+        end
+      end
+      if attached {CONS} Result then
+        Result := nreverse(Result)
+      end
+    end
+
+  apply(fn, args: LOBJ): LOBJ
+    do
+      if attached {ERROR} fn then
+        Result := fn
+      elseif attached {ERROR} args then
+        Result := args
+      elseif attached {SUBR} fn as subr then
+        Result := subrCall(subr.id, args)
+      else
+        Result := makeError(printObj(fn) + " is not function")
+      end
+    end
+
+  subrCall(id: INTEGER; args: LOBJ): LOBJ
+    do
+      if id = 0 then
+        Result := subrCar(args)
+      elseif id = 1 then
+        Result := subrCdr(args)
+      elseif id = 2 then
+        Result := subrCons(args)
+      else
+        Result := makeError("invalid subr " + id.out)
+      end
+    end
+
+  subrCar(args: LOBJ): LOBJ
+    do
+      Result := safeCar(safeCar(args))
+    end
+
+  subrCdr(args: LOBJ): LOBJ
+    do
+      Result := safeCdr(safeCar(args))
+    end
+
+  subrCons(args: LOBJ): LOBJ
+    do
+      Result := makeCons(safeCar(args), safeCar(safeCdr(args)))
     end
 
   init
@@ -351,9 +450,13 @@ feature
       sym_table.put(kNil, "nil")
       sym_t := makeSym("t")
       sym_quote := makeSym("quote")
+      sym_if := makeSym("if")
 
       g_env := makeCons(kNil, kNil)
       addToEnv(sym_t, sym_t, g_env)
+      addToEnv(makeSym("car"), makeSubr(0), g_env)
+      addToEnv(makeSym("cdr"), makeSubr(1), g_env)
+      addToEnv(makeSym("cons"), makeSubr(2), g_env)
     end
 
   make
