@@ -15,6 +15,7 @@ feature
   sym_if: LOBJ
   sym_lambda: LOBJ
   sym_defun: LOBJ
+  sym_setq: LOBJ
   g_env: LOBJ
 
   safeCar(obj: LOBJ): LOBJ
@@ -329,24 +330,25 @@ feature
     local
       e: LOBJ
       a: LOBJ
+      done: BOOLEAN
     do
       Result := kNil
       from
+        done := False
         e := env
       until
-        e = kNil
+        done or e = kNil
       loop
         if attached {CONS} e as c1 then
           from
             a := c1.car
           until
-            a = kNil
+            done or a = kNil
           loop
             if attached {CONS} a as c2 then
               if safeCar(c2.car) = sym then
                 Result := c2.car
-                a := kNil
-                e := kNil  -- break
+                done := True  -- break
               else
                 a := c2.cdr
               end
@@ -376,6 +378,7 @@ feature
       c: LOBJ
       expr: LOBJ
       sym: LOBJ
+      val: LOBJ
     do
       if attached {NIL} obj then
         Result := obj
@@ -411,6 +414,20 @@ feature
           sym := safeCar(args)
           addToEnv(sym, expr, g_env)
           Result := sym
+        elseif op = sym_setq then
+          val := eval(safeCar(safeCdr(args)), env)
+          if attached {ERROR} val then
+            Result := val
+          else
+            sym := safeCar(args)
+            bind := findVar(sym, env)
+            if attached {CONS} bind as b then
+              b.cdr := val
+            else
+              addToEnv(sym, val, g_env)
+            end
+            Result := val
+          end
         else
           Result := apply(eval(op, env), evlis(args, env))
         end
@@ -522,6 +539,7 @@ feature
       sym_if := makeSym("if")
       sym_lambda := makeSym("lambda")
       sym_defun := makeSym("defun")
+      sym_setq := makeSym("setq")
 
       g_env := makeCons(kNil, kNil)
       addToEnv(sym_t, sym_t, g_env)
