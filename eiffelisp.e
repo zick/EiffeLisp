@@ -505,8 +505,39 @@ feature
         Result := subrCdr(args)
       elseif id = 2 then
         Result := subrCons(args)
+      elseif id = 3 then
+        Result := subrEq(args)
+      elseif id = 4 then
+        Result := subrAtom(args)
+      elseif id = 5 then
+        Result := subrNumberp(args)
+      elseif id = 6 then
+        Result := subrSymbolp(args)
       else
-        Result := makeError("invalid subr " + id.out)
+        Result := arithCall(id - 7, args)
+      end
+    end
+
+  arithCall(id: INTEGER; args: LOBJ): LOBJ
+    do
+      if attached {NUM} safeCar(args) as n1 then
+        if attached {NUM} safeCar(safeCdr(args)) as n2 then
+          if id = 0 then
+            Result := makeNum(n1.data + n2.data)
+          elseif id = 1 then
+            Result := makeNum(n1.data * n2.data)
+          elseif id = 2 then
+            Result := makeNum(n1.data - n2.data)
+          elseif id = 3 then
+            Result := makeNum(n1.data // n2.data)
+          else
+            Result := makeNum(n1.data \\ n2.data)
+          end
+        else
+          Result := makeError("wrong type")
+        end
+      else
+        Result := makeError("wrong type")
       end
     end
 
@@ -523,6 +554,57 @@ feature
   subrCons(args: LOBJ): LOBJ
     do
       Result := makeCons(safeCar(args), safeCar(safeCdr(args)))
+    end
+
+  subrEq(args: LOBJ): LOBJ
+    local
+      x: LOBJ
+      y: LOBJ
+    do
+      x := safeCar(args)
+      y := safeCar(safeCdr(args))
+      if attached {NUM} x as n1 then
+        if attached {NUM} y as n2 then
+          if n1.data = n2.data then
+            Result := sym_t
+          else
+            Result := kNil
+          end
+        else
+          Result := kNil
+        end
+      elseif x = y then
+        Result := sym_t
+      else
+        Result := kNil
+      end
+    end
+
+  subrAtom(args: LOBJ): LOBJ
+    do
+      if attached {CONS} safeCar(args) then
+        Result := kNil
+      else
+        Result := sym_t
+      end
+    end
+
+  subrNumberp(args: LOBJ): LOBJ
+    do
+      if attached {NUM} safeCar(args) then
+        Result := sym_t
+      else
+        Result := kNil
+      end
+    end
+
+  subrSymbolp(args: LOBJ): LOBJ
+    do
+      if attached {SYM} safeCar(args) then
+        Result := sym_t
+      else
+        Result := kNil
+      end
     end
 
   init
@@ -546,6 +628,15 @@ feature
       addToEnv(makeSym("car"), makeSubr(0), g_env)
       addToEnv(makeSym("cdr"), makeSubr(1), g_env)
       addToEnv(makeSym("cons"), makeSubr(2), g_env)
+      addToEnv(makeSym("eq"), makeSubr(3), g_env)
+      addToEnv(makeSym("atom"), makeSubr(4), g_env)
+      addToEnv(makeSym("numberp"), makeSubr(5), g_env)
+      addToEnv(makeSym("symbolp"), makeSubr(6), g_env)
+      addToEnv(makeSym("+"), makeSubr(7), g_env)
+      addToEnv(makeSym("*"), makeSubr(8), g_env)
+      addToEnv(makeSym("-"), makeSubr(9), g_env)
+      addToEnv(makeSym("/"), makeSubr(10), g_env)
+      addToEnv(makeSym("mod"), makeSubr(11), g_env)
     end
 
   make
