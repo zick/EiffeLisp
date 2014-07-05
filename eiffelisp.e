@@ -10,6 +10,7 @@ feature
   kQuote: CHARACTER = '%''
 
   kNil: LOBJ
+  sym_quote: LOBJ
 
   safeCar(obj: LOBJ): LOBJ
     do
@@ -59,6 +60,36 @@ feature
       Result := err
     end
 
+  makeCons(a: LOBJ; d: LOBJ): LOBJ
+    local
+      c: CONS
+    do
+      create c.make_cons(a, d)
+      Result := c
+    end
+
+  nreverse(l: LOBJ): LOBJ
+    local
+      lst: LOBJ
+      tmp: LOBJ
+    do
+      Result := kNil
+      from
+        lst := l
+      until
+        lst = kNil
+      loop
+        if attached {CONS} lst as c then
+          tmp := c.cdr
+          c.cdr := Result
+          Result := lst
+          lst := tmp
+        else
+          lst := kNil  -- break
+        end
+      end
+    end
+
   isSpace(c: CHARACTER): BOOLEAN
     do
       if c = '%T' or else c = '%R' or else c = '%N' or else c = ' ' then
@@ -104,7 +135,7 @@ feature
       end
     end
 
-  readAtom(str: STRING): TUPLE[LOBJ, STRING]
+  readAtom(str: STRING): PARSE_STATE
     local
       i: INTEGER
       s: STRING
@@ -124,24 +155,121 @@ feature
         end
         i := i + 1
       end
-      Result := [makeNumOrSym(s), next]
+      create Result.make(makeNumOrSym(s), next)
     end
 
-  read(str: STRING): TUPLE[LOBJ, STRING]
+  parseError(s: STRING): PARSE_STATE
+    do
+      create Result.make(makeError(s), "")
+    end
+
+  read(str: STRING): PARSE_STATE
     local
       s: STRING
+      tmp: PARSE_STATE
     do
       s := skipSpaces(str)
       if s.count = 0 then
-        Result := [makeError("empty input"), ""]
+        Result := parseError("empty input")
       elseif s[1] = kRPar then
-        Result := [makeError("invalid syntax: " + s), ""]
+        Result := parseError("invalid syntax: " + s)
       elseif s[1] = kLPar then
-        Result := [makeError("noimpl"), ""]
+        Result := readList(s.substring(2, s.count))
       elseif s[1] = kQuote then
-        Result := [makeError("noimpl"), ""]
+        tmp := read(s.substring(2, s.count))
+        create Result.make(makeCons(sym_quote, makeCons(tmp.obj, kNil)),
+                           tmp.next)
       else
         Result := readAtom(s)
+      end
+    end
+
+  readList(str: STRING): PARSE_STATE
+    local
+      obj: LOBJ
+      s: STRING
+      next: STRING
+      tmp: PARSE_STATE
+    do
+      next := ""
+      obj := kNil
+      from
+        s := str
+      until
+        s.count = 0
+      loop
+        s := skipSpaces(s)
+        if s.count = 0 then
+          obj := makeError("unfinished parenthesis")
+          s := ""  -- break
+        elseif s[1] = kRPar then
+          next := s.substring(2, s.count)
+          s := ""  -- break
+        else
+          tmp := read(s)
+          if attached {ERROR} tmp.obj as err then
+            obj := tmp.obj
+            s := ""  -- break
+          else
+            obj := makeCons(tmp.obj, obj)
+            s := tmp.next
+          end
+        end
+      end
+      if attached {CONS} obj then
+        create Result.make(nreverse(obj), next)
+      else
+        create Result.make(obj, next)
+      end
+    end
+
+  printObj(obj: LOBJ): STRING
+    do
+      if attached {NIL} obj then
+        Result := "nil"
+      elseif attached {NUM} obj as n then
+        Result := n.data.out
+      elseif attached {SYM} obj as s then
+        Result := s.data
+      elseif attached {ERROR} obj as e then
+        Result := "<error: " + e.data + ">"
+      elseif attached {CONS} obj then
+        Result := printList(obj)
+      else
+        Result := "<unknown>"
+      end
+    end
+
+  printList(obj: LOBJ): STRING
+    local
+      lst: LOBJ
+      first: BOOLEAN
+      done: BOOLEAN
+    do
+      Result := ""
+      lst := obj
+      from
+        first := True
+        done := False
+      until
+        done = True
+      loop
+        if attached {CONS} lst as c then
+          if first then
+            first := False
+          else
+            Result := Result + " "
+          end
+          Result := Result + printObj(c.car)
+          lst := c.cdr
+        else
+          done := True -- break
+        end
+      end
+      if lst = kNil then
+        Result := "(" + Result + ")"
+      else
+        Result := "(" + Result + " . " + printObj(lst) + ")"
       end
     end
 
@@ -154,6 +282,7 @@ feature
 
       create sym_table.make(32)
       sym_table.put(kNil, "nil")
+      sym_quote := makeSym("quote")
     end
 
   make
@@ -170,7 +299,7 @@ feature
         io.read_line
         line := io.last_string
         if line.count > 0 then
-          print(read(line)[1])
+          print(printObj(read(line).obj))
           io.put_new_line
         end
       end
