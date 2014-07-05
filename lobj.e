@@ -1,0 +1,2 @@
+class LOBJ
+end
