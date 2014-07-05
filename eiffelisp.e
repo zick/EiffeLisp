@@ -13,6 +13,7 @@ feature
   sym_t: LOBJ
   sym_quote: LOBJ
   sym_if: LOBJ
+  sym_lambda: LOBJ
   g_env: LOBJ
 
   safeCar(obj: LOBJ): LOBJ
@@ -63,7 +64,7 @@ feature
       Result := err
     end
 
-  makeCons(a: LOBJ; d: LOBJ): LOBJ
+  makeCons(a, d: LOBJ): LOBJ
     local
       c: CONS
     do
@@ -77,6 +78,14 @@ feature
     do
       create subr.make_subr(id)
       Result := subr
+    end
+
+  makeExpr(args, env: LOBJ): LOBJ
+    local
+      expr: EXPR
+    do
+      create expr.make_expr(safeCar(args), safeCdr(args), env)
+      Result := expr
     end
 
   nreverse(l: LOBJ): LOBJ
@@ -99,6 +108,33 @@ feature
           lst := kNil  -- break
         end
       end
+    end
+
+  pairlis(obj1, obj2: LOBJ): LOBJ
+    local
+      lst1: LOBJ
+      lst2: LOBJ
+    do
+      Result := kNil
+      from
+        lst1 := obj1
+        lst2 := obj2
+      until
+        lst1 = kNil or lst2 = kNil
+      loop
+        if attached {CONS} lst1 as c1 then
+          if attached {CONS} lst2 as c2 then
+            Result := makeCons(makeCons(c1.car, c2.car), Result)
+            lst1 := c1.cdr
+            lst2 := c2.cdr
+          else
+            lst2 := kNil  -- break
+          end
+        else
+          lst1 := kNil  -- break
+        end
+      end
+      Result := nreverse(Result)
     end
 
   isSpace(c: CHARACTER): BOOLEAN
@@ -248,6 +284,8 @@ feature
         Result := printList(obj)
       elseif attached {SUBR} obj then
         Result := "<subr>"
+      elseif attached {EXPR} obj then
+        Result := "<expr>"
       else
         Result := "<unknown>"
       end
@@ -363,6 +401,8 @@ feature
           else
             Result := eval(safeCar(safeCdr(args)), env)
           end
+        elseif op = sym_lambda then
+          Result := makeExpr(args, env)
         else
           Result := apply(eval(op, env), evlis(args, env))
         end
@@ -398,6 +438,25 @@ feature
       end
     end
 
+  progn(body, env: LOBJ): LOBJ
+    local
+      b: LOBJ
+    do
+      Result := kNil
+      from
+        b := body
+      until
+        b = kNil
+      loop
+        if attached {CONS} b as c then
+          Result := eval(c.car, env)
+          b := c.cdr
+        else
+          b := kNil  -- break
+        end
+      end
+    end
+
   apply(fn, args: LOBJ): LOBJ
     do
       if attached {ERROR} fn then
@@ -406,6 +465,8 @@ feature
         Result := args
       elseif attached {SUBR} fn as subr then
         Result := subrCall(subr.id, args)
+      elseif attached {EXPR} fn as expr then
+        Result := progn(expr.body, makeCons(pairlis(expr.args, args), expr.env))
       else
         Result := makeError(printObj(fn) + " is not function")
       end
@@ -451,6 +512,7 @@ feature
       sym_t := makeSym("t")
       sym_quote := makeSym("quote")
       sym_if := makeSym("if")
+      sym_lambda := makeSym("lambda")
 
       g_env := makeCons(kNil, kNil)
       addToEnv(sym_t, sym_t, g_env)
